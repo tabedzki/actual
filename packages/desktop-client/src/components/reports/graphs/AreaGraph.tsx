@@ -170,8 +170,12 @@ export function AreaGraph({
   const format = useFormat();
 
   const privacyMode = usePrivacyMode();
-  const dataMax = Math.max(...data.intervalData.map(i => i[balanceTypeOp] ?? 0));
-  const dataMin = Math.min(...data.intervalData.map(i => i[balanceTypeOp] ?? 0));
+  const dataMax = Math.max(
+    ...data.intervalData.map(i => i[balanceTypeOp] ?? 0),
+  );
+  const dataMin = Math.min(
+    ...data.intervalData.map(i => i[balanceTypeOp] ?? 0),
+  );
 
   const labelsMargin = viewLabels ? 30 : 0;
   const dataDiff = dataMax - dataMin;

@@ -147,7 +147,10 @@ export const ReportTableRow = memo(
                       <Text style={hoverUnderline}>{value}</Text>
                     )}
                     valueStyle={compactStyle}
-                    value={format(intervalItem[balanceTypeOp] ?? 0, 'financial')}
+                    value={format(
+                      intervalItem[balanceTypeOp] ?? 0,
+                      'financial',
+                    )}
                     title={
                       Math.abs(intervalItem[balanceTypeOp] ?? 0) > 100000
                         ? format(intervalItem[balanceTypeOp] ?? 0, 'financial')
@@ -273,7 +276,9 @@ export const ReportTableRow = memo(
             style={{
               fontWeight: 600,
               minWidth: compact ? 50 : 85,
-              ...(colorized && { color: getAmountColor(item[balanceTypeOp] ?? 0) }),
+              ...(colorized && {
+                color: getAmountColor(item[balanceTypeOp] ?? 0),
+              }),
             }}
             unexposedContent={({ value }) => (
               <Text style={hoverUnderline}>{value}</Text>
