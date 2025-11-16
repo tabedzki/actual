@@ -31,9 +31,9 @@ export function sortData({
   return (a, b) => {
     let comparison = 0;
     if (sortByOp === 'asc') {
-      comparison = a[balanceTypeOp] - b[balanceTypeOp];
+      comparison = (a[balanceTypeOp] ?? 0) - (b[balanceTypeOp] ?? 0);
     } else if (sortByOp === 'desc') {
-      comparison = b[balanceTypeOp] - a[balanceTypeOp];
+      comparison = (b[balanceTypeOp] ?? 0) - (a[balanceTypeOp] ?? 0);
     } else if (sortByOp === 'name') {
       comparison = (a.name ?? '').localeCompare(b.name ?? '');
     } else if (sortByOp === 'budget') {

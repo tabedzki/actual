@@ -430,6 +430,9 @@ function CustomReportInner({ report: initialReport }: CustomReportInnerProps) {
   const payees = usePayees();
   const accounts = useAccounts();
 
+  const isBudgetType =
+    balanceTypeOp === 'budgeted' || balanceTypeOp === 'budgetBalance';
+
   const hasWarning = calculateHasWarning(conditions, {
     categories: categories.list,
     payees,
@@ -907,6 +910,24 @@ function CustomReportInner({ report: initialReport }: CustomReportInnerProps) {
                     'This report is configured to use a non-existing filter value (i.e. category/account/payee).',
                   )}
                 </Warning>
+              )}
+              {isBudgetType && (
+                <View
+                  style={{
+                    padding: 10,
+                    backgroundColor: theme.tableRowHeaderBackground,
+                    borderRadius: 4,
+                    marginTop: 5,
+                  }}
+                >
+                  <Text style={{ fontSize: 13, color: theme.pageTextSubdued }}>
+                    <Trans>
+                      Note: Budget data is only available for category-based
+                      grouping. Filters apply to budgeted amounts, not
+                      transactions.
+                    </Trans>
+                  </Text>
+                </View>
               )}
             </View>
           )}

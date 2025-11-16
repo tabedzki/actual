@@ -48,6 +48,16 @@ const balanceTypeOptions = [
     key: 'Net Deposit',
     format: 'netAssets' as const,
   },
+  {
+    description: t('Budgeted (for categories)'),
+    key: 'Budgeted',
+    format: 'budgeted' as const,
+  },
+  {
+    description: t('Budget Balance (budgeted - spent)'),
+    key: 'Budget Balance',
+    format: 'budgetBalance' as const,
+  },
 ];
 
 const groupByOptions = [

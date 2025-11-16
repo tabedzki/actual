@@ -2,6 +2,7 @@ import * as d from 'date-fns';
 
 import { send } from 'loot-core/platform/client/fetch';
 import * as monthUtils from 'loot-core/shared/months';
+import { q } from 'loot-core/shared/query';
 import {
   type AccountEntity,
   type PayeeEntity,
@@ -101,6 +102,17 @@ export function createCustomSpreadsheet({
     });
     const conditionsOpKey = conditionsOp === 'or' ? '$or' : '$and';
 
+    // Prepare budget filters (category-only filters for budget queries)
+    const { filters: budgetFilters } = await send(
+      'make-filters-from-conditions',
+      {
+        conditions: conditions.filter(
+          cond => !cond.customName && cond.field === 'category',
+        ),
+        applySpecialCases: false,
+      },
+    );
+
     let assets: QueryDataEntity[];
     let debts: QueryDataEntity[];
     [assets, debts] = await Promise.all([
@@ -148,10 +160,57 @@ export function createCustomSpreadsheet({
             ReportOptions.intervalRange.get(interval) || 'rangeInclusive'
           ](startDate, endDate);
 
+    // Fetch budget data for budget-related balance types
+    // Budget data is only meaningful for category-based grouping
+    const needsBudgetData =
+      balanceTypeOp === 'budgeted' || balanceTypeOp === 'budgetBalance';
+    const isCategoryBased =
+      groupByLabel === 'category' || groupByLabel === 'categoryGroup';
+
+    type BudgetDataEntity = {
+      month: number;
+      category: string;
+      amount: number;
+    };
+
+    let budgetData: BudgetDataEntity[] = [];
+    if (needsBudgetData && isCategoryBased) {
+      // Get all months covered by the intervals
+      const monthIntervals =
+        interval === 'Monthly'
+          ? intervals
+          : interval === 'Yearly'
+            ? intervals.map(y => `${y}-01`)
+            : monthUtils.rangeInclusive(
+                monthUtils.monthFromDate(d.parseISO(intervals[0])),
+                monthUtils.monthFromDate(
+                  d.parseISO(intervals[intervals.length - 1]),
+                ),
+              );
+
+      // Fetch budget data for all months
+      const monthNumbers = monthIntervals.map(m =>
+        parseInt(m.replace('-', '')),
+      );
+
+      budgetData = await aqlQuery(
+        q('zero_budgets')
+          .filter({
+            month: { $oneof: monthNumbers },
+          })
+          .filter({
+            [conditionsOpKey]: budgetFilters,
+          })
+          .select(['month', 'category', 'amount']),
+      ).then(({ data }) => data);
+    }
+
     let totalAssets = 0;
     let totalDebts = 0;
     let netAssets = 0;
     let netDebts = 0;
+    let totalBudgeted = 0;
+    let totalBudgetBalance = 0;
 
     const groupsByCategory =
       groupByLabel === 'category' || groupByLabel === 'categoryGroup';
@@ -163,6 +222,8 @@ export function createCustomSpreadsheet({
         let perIntervalNetAssets = 0;
         let perIntervalNetDebts = 0;
         let perIntervalTotals = 0;
+        let perIntervalBudgeted = 0;
+        let perIntervalBudgetBalance = 0;
         const stacked: Record<string, number> = {};
 
         groupByList.map(item => {
@@ -204,6 +265,43 @@ export function createCustomSpreadsheet({
 
           const netAmounts = intervalAssets + intervalDebts;
 
+          // Calculate budget amounts for this item in this interval
+          let budgetAmount = 0;
+          if (needsBudgetData && isCategoryBased && item.id) {
+            // Determine which month(s) this interval covers
+            let intervalMonths: number[] = [];
+            if (interval === 'Monthly') {
+              intervalMonths = [parseInt(intervalItem.replace('-', ''))];
+            } else if (interval === 'Yearly') {
+              // For yearly, sum all months in that year
+              const year = parseInt(intervalItem);
+              intervalMonths = Array.from(
+                { length: 12 },
+                (_, i) => year * 100 + i + 1,
+              );
+            } else {
+              // For Daily/Weekly, get the month of this interval
+              const month = monthUtils.monthFromDate(d.parseISO(intervalItem));
+              intervalMonths = [parseInt(month.replace('-', ''))];
+            }
+
+            // Sum budget for this category/group in these months
+            budgetAmount = budgetData
+              .filter(
+                b =>
+                  intervalMonths.includes(b.month) &&
+                  (groupByLabel === 'category'
+                    ? b.category === item.id
+                    : // For groups, we need to check if the category belongs to this group
+                      categories.list.some(
+                        cat => cat.id === b.category && cat.group === item.id,
+                      )),
+              )
+              .reduce((sum, b) => sum + b.amount, 0);
+          }
+
+          const budgetBalanceAmount = budgetAmount - Math.abs(intervalDebts);
+
           if (balanceTypeOp === 'totalAssets') {
             stackAmounts += intervalAssets;
           }
@@ -219,8 +317,17 @@ export function createCustomSpreadsheet({
           if (balanceTypeOp === 'totalTotals') {
             stackAmounts += netAmounts;
           }
+          if (balanceTypeOp === 'budgeted') {
+            stackAmounts += Math.abs(budgetAmount);
+          }
+          if (balanceTypeOp === 'budgetBalance') {
+            stackAmounts += budgetBalanceAmount;
+          }
 
           stacked[item.name] = stackAmounts;
+
+          perIntervalBudgeted += Math.abs(budgetAmount);
+          perIntervalBudgetBalance += budgetBalanceAmount;
 
           perIntervalNetAssets =
             netAmounts > 0
@@ -238,6 +345,8 @@ export function createCustomSpreadsheet({
         totalDebts += perIntervalDebts;
         netAssets += perIntervalNetAssets;
         netDebts += perIntervalNetDebts;
+        totalBudgeted += perIntervalBudgeted;
+        totalBudgetBalance += perIntervalBudgetBalance;
 
         arr.push({
           date: d.format(
@@ -255,6 +364,8 @@ export function createCustomSpreadsheet({
           netAssets: perIntervalNetAssets,
           netDebts: perIntervalNetDebts,
           totalTotals: perIntervalTotals,
+          budgeted: needsBudgetData ? perIntervalBudgeted : undefined,
+          budgetBalance: needsBudgetData ? perIntervalBudgetBalance : undefined,
         });
 
         return arr;
@@ -324,6 +435,8 @@ export function createCustomSpreadsheet({
       netAssets,
       netDebts,
       totalTotals: totalAssets + totalDebts,
+      budgeted: needsBudgetData ? totalBudgeted : undefined,
+      budgetBalance: needsBudgetData ? totalBudgetBalance : undefined,
     });
     setDataCheck?.(true);
   };

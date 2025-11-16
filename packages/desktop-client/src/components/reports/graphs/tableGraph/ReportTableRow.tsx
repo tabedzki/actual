@@ -72,7 +72,7 @@ export const ReportTableRow = memo(
     interval,
     colorized,
   }: ReportTableRowProps) => {
-    const average = Math.round(item[balanceTypeOp] / intervalsCount);
+    const average = Math.round((item[balanceTypeOp] ?? 0) / intervalsCount);
     const groupByItem = groupBy === 'Interval' ? 'date' : 'name';
     const format = useFormat();
 
@@ -140,17 +140,17 @@ export const ReportTableRow = memo(
                     style={{
                       minWidth: compact ? 50 : 85,
                       ...(colorized && {
-                        color: getAmountColor(intervalItem[balanceTypeOp]),
+                        color: getAmountColor(intervalItem[balanceTypeOp] ?? 0),
                       }),
                     }}
                     unexposedContent={({ value }) => (
                       <Text style={hoverUnderline}>{value}</Text>
                     )}
                     valueStyle={compactStyle}
-                    value={format(intervalItem[balanceTypeOp], 'financial')}
+                    value={format(intervalItem[balanceTypeOp] ?? 0, 'financial')}
                     title={
-                      Math.abs(intervalItem[balanceTypeOp]) > 100000
-                        ? format(intervalItem[balanceTypeOp], 'financial')
+                      Math.abs(intervalItem[balanceTypeOp] ?? 0) > 100000
+                        ? format(intervalItem[balanceTypeOp] ?? 0, 'financial')
                         : undefined
                     }
                     onClick={() =>
@@ -264,16 +264,16 @@ export const ReportTableRow = memo(
                 </>
               )}
           <Cell
-            value={format(item[balanceTypeOp], 'financial')}
+            value={format(item[balanceTypeOp] ?? 0, 'financial')}
             title={
-              Math.abs(item[balanceTypeOp]) > 100000
-                ? format(item[balanceTypeOp], 'financial')
+              Math.abs(item[balanceTypeOp] ?? 0) > 100000
+                ? format(item[balanceTypeOp] ?? 0, 'financial')
                 : undefined
             }
             style={{
               fontWeight: 600,
               minWidth: compact ? 50 : 85,
-              ...(colorized && { color: getAmountColor(item[balanceTypeOp]) }),
+              ...(colorized && { color: getAmountColor(item[balanceTypeOp] ?? 0) }),
             }}
             unexposedContent={({ value }) => (
               <Text style={hoverUnderline}>{value}</Text>
