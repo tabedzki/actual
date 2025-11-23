@@ -107,7 +107,7 @@ function BudgetAnalysisInternal({ widget }: BudgetAnalysisInternalProps) {
       const earliestTrans = await send('get-earliest-transaction');
       const latestTrans = await send('get-latest-transaction');
       setLatestTransaction(
-        latestTrans ? fromDateRepr(latestTrans.date) : monthUtils.currentDay(),
+        latestTrans ? latestTrans.date : monthUtils.currentDay(),
       );
 
       const currentMonth = monthUtils.currentMonth();
@@ -137,26 +137,22 @@ function BudgetAnalysisInternal({ widget }: BudgetAnalysisInternalProps) {
         .reverse();
 
       setAllMonths(allMonthsData);
-
-      if (widget?.meta?.timeFrame) {
-        const [calculatedStart, calculatedEnd] = calculateTimeRange(
-          widget.meta.timeFrame,
-        );
-        setStart(calculatedStart);
-        setEnd(calculatedEnd);
-        setMode(widget.meta.timeFrame.mode);
-      } else {
-        const [liveStart, liveEnd] = calculateTimeRange({
-          start: monthUtils.subMonths(currentMonth, 5),
-          end: currentMonth,
-          mode: 'sliding-window',
-        });
-        setStart(liveStart);
-        setEnd(liveEnd);
-      }
     }
     run();
-  }, [locale, widget?.meta?.timeFrame]);
+  }, [locale]);
+
+  useEffect(() => {
+    if (latestTransaction) {
+      const [calculatedStart, calculatedEnd] = calculateTimeRange(
+        widget?.meta?.timeFrame,
+        undefined,
+        latestTransaction,
+      );
+      setStart(calculatedStart);
+      setEnd(calculatedEnd);
+      setMode(widget?.meta?.timeFrame?.mode ?? 'sliding-window');
+    }
+  }, [latestTransaction, widget?.meta?.timeFrame]);
 
   const startDate = start + '-01';
   const endDate = monthUtils.getMonthEnd(end + '-01');
