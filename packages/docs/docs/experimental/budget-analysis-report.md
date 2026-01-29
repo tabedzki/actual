@@ -4,6 +4,10 @@
 This is an **experimental feature**. That means we’re still working on finishing it. There may be bugs, missing functionality or incomplete documentation, and we may decide to remove the feature in a future release. If you have any feedback, please comment on the [dedicated issue](https://github.com/actualbudget/actual/issues/6742) or post a message in the Discord.
 :::
 
+:::note
+Client Version 26.2.0 and Server Version 26.2.0 or higher are required to use this feature.
+:::
+
 ## What it is
 
 The Budget Analysis is a financial planning tool, that tracks the balance of your budget over time.
