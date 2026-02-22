@@ -232,7 +232,7 @@ function BudgetAnalysisInternal({ widget }: BudgetAnalysisInternalProps) {
             graphType,
             showBalance,
             stackBars,
-      },
+          },
         },
       },
       {
