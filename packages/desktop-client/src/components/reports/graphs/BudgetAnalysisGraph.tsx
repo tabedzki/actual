@@ -239,14 +239,17 @@ export function BudgetAnalysisGraph({
         const barFillOpacity = stackBars ? 0.95 : 1;
         // When stacking, calculate bar size based on available space to ensure perfect overlap
         // Use a calculation that adapts to container width and number of data points
-        const calculatedBarSize = stackBars
+        const barSize = stackBars
           ? Math.max(20, Math.min(60, ((width - 40) / graphData.length) * 0.8))
           : undefined;
-        const barSize = calculatedBarSize;
         const barGap = stackBars && barSize ? -barSize : undefined;
 
         return graphType === 'Bar' ? (
-          <ComposedChart {...chartProps} barGap={barGap}>
+          <ComposedChart
+            {...chartProps}
+            barGap={barGap}
+            barSize={barSize || undefined}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke={theme.pillBorder} />
             <XAxis
               dataKey="date"
@@ -283,7 +286,6 @@ export function BudgetAnalysisGraph({
               name={budgetedLabel}
               animationDuration={1000}
               fillOpacity={barFillOpacity}
-              barSize={barSize}
             />
             <Bar
               dataKey="spent"
@@ -291,7 +293,6 @@ export function BudgetAnalysisGraph({
               name={spentLabel}
               animationDuration={1000}
               fillOpacity={barFillOpacity}
-              barSize={barSize}
             />
             <Bar
               dataKey="overspendingAdjustment"
@@ -299,7 +300,6 @@ export function BudgetAnalysisGraph({
               name={overspendingLabel}
               animationDuration={1000}
               fillOpacity={barFillOpacity}
-              barSize={barSize}
             />
             {showBalance && (
               <Line
