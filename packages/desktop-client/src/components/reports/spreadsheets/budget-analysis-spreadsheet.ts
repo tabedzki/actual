@@ -46,9 +46,11 @@ export function createBudgetAnalysisSpreadsheet({
     // Get all categories
     const { list: allCategories } = await send('get-categories');
 
-    // Filter categories based on conditions
-    const categoryConditions = conditions.filter(
-      cond => !cond.customName && cond.field === 'category',
+    // Filter categories based on conditions (supports both 'category' and 'category_group' fields)
+    const relevantConditions = conditions.filter(
+      cond =>
+        !cond.customName &&
+        (cond.field === 'category' || cond.field === 'category_group'),
     );
 
     // Base set: expense categories only (exclude income and hidden)
@@ -57,18 +59,22 @@ export function createBudgetAnalysisSpreadsheet({
     );
 
     let categoriesToInclude: CategoryEntity[];
-    if (categoryConditions.length > 0) {
-      // Evaluate each condition to get sets of matching categories
-      const conditionResults = categoryConditions.map(cond => {
+    if (relevantConditions.length > 0) {
+      // Evaluate each condition to get sets of matching categories.
+      // category_group conditions are expanded to their member categories via cat.group.
+      const conditionResults = relevantConditions.map(cond => {
+        const getKey = (cat: CategoryEntity) =>
+          cond.field === 'category_group' ? cat.group : cat.id;
         return baseCategories.filter((cat: CategoryEntity) => {
+          const key = getKey(cat);
           if (cond.op === 'is') {
-            return cond.value === cat.id;
+            return cond.value === key;
           } else if (cond.op === 'isNot') {
-            return cond.value !== cat.id;
+            return cond.value !== key;
           } else if (cond.op === 'oneOf') {
-            return cond.value.includes(cat.id);
+            return cond.value.includes(key);
           } else if (cond.op === 'notOneOf') {
-            return !cond.value.includes(cat.id);
+            return !cond.value.includes(key);
           }
           return false;
         });
@@ -102,7 +108,7 @@ export function createBudgetAnalysisSpreadsheet({
         }
       }
     } else {
-      // No category filter, use all expense categories
+      // No category or category group filter — include all expense categories
       categoriesToInclude = baseCategories;
     }
 
