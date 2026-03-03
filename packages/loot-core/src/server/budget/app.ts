@@ -149,10 +149,7 @@ app.method('category-group-update', mutator(undoable(updateCategoryGroup)));
 app.method('category-group-move', mutator(undoable(moveCategoryGroup)));
 app.method('category-group-delete', mutator(undoable(deleteCategoryGroup)));
 app.method('must-category-transfer', isCategoryTransferRequired);
-app.method(
-  'budget/conditions-to-category-ids',
-  conditionsToCategoryIds,
-);
+app.method('budget/conditions-to-category-ids', conditionsToCategoryIds);
 
 app.method(
   'budget/get-category-automations',
@@ -191,7 +188,8 @@ async function conditionsToCategoryIds({
 
   const categoryConditions = conditions.filter(
     condition =>
-      (condition.field === 'category' || condition.field === 'category_group') &&
+      (condition.field === 'category' ||
+        condition.field === 'category_group') &&
       !condition.customName,
   );
 
@@ -225,9 +223,13 @@ async function conditionsToCategoryIds({
         case 'notOneOf':
           return !(condition.value as string[]).includes(id);
         case 'contains':
-          return name.toLowerCase().includes(String(condition.value).toLowerCase());
+          return name
+            .toLowerCase()
+            .includes(String(condition.value).toLowerCase());
         case 'doesNotContain':
-          return !name.toLowerCase().includes(String(condition.value).toLowerCase());
+          return !name
+            .toLowerCase()
+            .includes(String(condition.value).toLowerCase());
         case 'matches':
           try {
             return new RegExp(String(condition.value), 'i').test(name);
@@ -253,7 +255,9 @@ async function conditionsToCategoryIds({
   } else {
     const ids = new Set(conditionResults[0].map(category => category.id));
     for (let i = 1; i < conditionResults.length; i++) {
-      const currentIds = new Set(conditionResults[i].map(category => category.id));
+      const currentIds = new Set(
+        conditionResults[i].map(category => category.id),
+      );
       for (const id of ids) {
         if (!currentIds.has(id)) {
           ids.delete(id);

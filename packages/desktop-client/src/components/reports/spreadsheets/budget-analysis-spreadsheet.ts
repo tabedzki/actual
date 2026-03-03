@@ -46,17 +46,18 @@ export function createBudgetAnalysisSpreadsheet({
     const categoryScopeConditions = conditions.filter(
       condition =>
         !condition.customName &&
-        (condition.field === 'category' || condition.field === 'category_group'),
+        (condition.field === 'category' ||
+          condition.field === 'category_group'),
     );
 
     // Get all categories
     const { list: allCategories } = await send('get-categories');
 
     // Budget Analysis only supports category-scoped filters.
-    const { categoryIds } = await send(
-      'budget/conditions-to-category-ids',
-      { conditions: categoryScopeConditions, conditionsOp },
-    );
+    const { categoryIds } = await send('budget/conditions-to-category-ids', {
+      conditions: categoryScopeConditions,
+      conditionsOp,
+    });
 
     // Base set: expense categories only (exclude income and hidden)
     const baseCategories = allCategories.filter(
