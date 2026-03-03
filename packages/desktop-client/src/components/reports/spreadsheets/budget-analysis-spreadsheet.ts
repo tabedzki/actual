@@ -72,9 +72,28 @@ export function createBudgetAnalysisSpreadsheet({
           } else if (cond.op === 'isNot') {
             return cond.value !== key;
           } else if (cond.op === 'oneOf') {
-            return cond.value.includes(key);
+            return Array.isArray(cond.value) && cond.value.includes(key);
           } else if (cond.op === 'notOneOf') {
-            return !cond.value.includes(key);
+            return Array.isArray(cond.value) && !cond.value.includes(key);
+          } else if (cond.op === 'contains') {
+            return (
+              typeof cond.value === 'string' &&
+              key.toLowerCase().includes(cond.value.toLowerCase())
+            );
+          } else if (cond.op === 'doesNotContain') {
+            return (
+              typeof cond.value === 'string' &&
+              !key.toLowerCase().includes(cond.value.toLowerCase())
+            );
+          } else if (cond.op === 'matches') {
+            if (typeof cond.value !== 'string') {
+              return false;
+            }
+            try {
+              return new RegExp(cond.value, 'i').test(key);
+            } catch {
+              return false;
+            }
           }
           return false;
         });
