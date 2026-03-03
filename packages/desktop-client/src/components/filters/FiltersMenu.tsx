@@ -360,6 +360,7 @@ type FilterButtonProps<T extends RuleConditionEntity> = {
   compact: boolean;
   hover: boolean;
   exclude?: string[];
+  include?: string[];
 };
 
 export function FilterButton<T extends RuleConditionEntity>({
@@ -367,6 +368,7 @@ export function FilterButton<T extends RuleConditionEntity>({
   compact,
   hover,
   exclude,
+  include,
 }: FilterButtonProps<T>) {
   const { t } = useTranslation();
   const filters = useTransactionFilters();
@@ -517,7 +519,13 @@ export function FilterButton<T extends RuleConditionEntity>({
           }}
           items={[
             ...translatedFilterFields
-              .filter(f => (exclude ? !exclude.includes(f[0]) : true))
+              .filter(f =>
+                include
+                  ? include.includes(f[0])
+                  : exclude
+                    ? !exclude.includes(f[0])
+                    : true,
+              )
               .sort()
               .map(([name, text]) => ({
                 name,
