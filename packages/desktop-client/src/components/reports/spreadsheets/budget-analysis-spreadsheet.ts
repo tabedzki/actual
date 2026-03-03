@@ -65,6 +65,18 @@ export function createBudgetAnalysisSpreadsheet({
       const conditionResults = relevantConditions.map(cond => {
         const getKey = (cat: CategoryEntity) =>
           cond.field === 'category_group' ? cat.group : cat.id;
+        const matchesRegex =
+          cond.op === 'matches' &&
+            typeof cond.value === 'string' &&
+            cond.value.length <= 256
+            ? (() => {
+              try {
+                return new RegExp(cond.value, 'i');
+              } catch {
+                return null;
+              }
+            })()
+            : null;
         return baseCategories.filter((cat: CategoryEntity) => {
           const key = getKey(cat);
           if (cond.op === 'is') {
@@ -86,14 +98,7 @@ export function createBudgetAnalysisSpreadsheet({
               !key.toLowerCase().includes(cond.value.toLowerCase())
             );
           } else if (cond.op === 'matches') {
-            if (typeof cond.value !== 'string') {
-              return false;
-            }
-            try {
-              return new RegExp(cond.value, 'i').test(key);
-            } catch {
-              return false;
-            }
+            return matchesRegex?.test(key) ?? false;
           }
           return false;
         });
