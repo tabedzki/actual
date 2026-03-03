@@ -43,14 +43,19 @@ export function createBudgetAnalysisSpreadsheet({
     spreadsheet: ReturnType<typeof useSpreadsheet>,
     setData: (data: BudgetAnalysisData) => void,
   ) => {
+    const categoryScopeConditions = conditions.filter(
+      condition =>
+        !condition.customName &&
+        (condition.field === 'category' || condition.field === 'category_group'),
+    );
+
     // Get all categories
     const { list: allCategories } = await send('get-categories');
 
-    // Filter categories based on conditions (supports both 'category' and 'category_group' fields)
-    const relevantConditions = conditions.filter(
-      cond =>
-        !cond.customName &&
-        (cond.field === 'category' || cond.field === 'category_group'),
+    // Budget Analysis only supports category-scoped filters.
+    const { categoryIds } = await send(
+      'budget/conditions-to-category-ids',
+      { conditions: categoryScopeConditions, conditionsOp },
     );
 
     // Base set: expense categories only (exclude income and hidden)
@@ -58,59 +63,11 @@ export function createBudgetAnalysisSpreadsheet({
       (cat: CategoryEntity) => !cat.is_income && !cat.hidden,
     );
 
-    let categoriesToInclude: CategoryEntity[];
-    if (relevantConditions.length > 0) {
-      // Evaluate each condition to get sets of matching categories.
-      // category_group conditions are expanded to their member categories via cat.group.
-      const conditionResults = relevantConditions.map(cond => {
-        const getKey = (cat: CategoryEntity) =>
-          cond.field === 'category_group' ? cat.group : cat.id;
-        return baseCategories.filter((cat: CategoryEntity) => {
-          const key = getKey(cat);
-          if (cond.op === 'is') {
-            return cond.value === key;
-          } else if (cond.op === 'isNot') {
-            return cond.value !== key;
-          } else if (cond.op === 'oneOf') {
-            return cond.value.includes(key);
-          } else if (cond.op === 'notOneOf') {
-            return !cond.value.includes(key);
-          }
-          return false;
-        });
-      });
-
-      // Combine results based on conditionsOp
-      if (conditionsOp === 'or') {
-        // OR: Union of all matching categories
-        const categoryIds = new Set(conditionResults.flat().map(cat => cat.id));
-        categoriesToInclude = baseCategories.filter(cat =>
-          categoryIds.has(cat.id),
-        );
-      } else {
-        // AND: Intersection of all matching categories
-        if (conditionResults.length === 0) {
-          categoriesToInclude = [];
-        } else {
-          const firstSet = new Set(conditionResults[0].map(cat => cat.id));
-          for (let i = 1; i < conditionResults.length; i++) {
-            const currentIds = new Set(conditionResults[i].map(cat => cat.id));
-            // Keep only categories that are in both sets
-            for (const id of firstSet) {
-              if (!currentIds.has(id)) {
-                firstSet.delete(id);
-              }
-            }
-          }
-          categoriesToInclude = baseCategories.filter(cat =>
-            firstSet.has(cat.id),
-          );
-        }
-      }
-    } else {
-      // No category or category group filter — include all expense categories
-      categoriesToInclude = baseCategories;
-    }
+    // null means "no filter was applied" → use all expense categories
+    const categoriesToInclude: CategoryEntity[] =
+      categoryIds === null
+        ? baseCategories
+        : baseCategories.filter(cat => categoryIds.includes(cat.id));
 
     // Get monthly intervals (Budget Analysis only supports monthly)
     const intervals = monthUtils.rangeInclusive(

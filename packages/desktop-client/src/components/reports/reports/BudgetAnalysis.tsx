@@ -15,6 +15,8 @@ import * as d from 'date-fns';
 
 import { send } from 'loot-core/platform/client/connection';
 import * as monthUtils from 'loot-core/shared/months';
+import { mapField } from 'loot-core/shared/rules';
+import { titleFirst } from 'loot-core/shared/util';
 import type {
   BudgetAnalysisWidget,
   RuleConditionEntity,
@@ -48,6 +50,8 @@ import { addNotification } from '@desktop-client/notifications/notificationsSlic
 import { useDispatch } from '@desktop-client/redux';
 import { useUpdateDashboardWidgetMutation } from '@desktop-client/reports/mutations';
 
+const BUDGET_ANALYSIS_SUPPORTED_FIELDS = ['category', 'category_group'];
+
 export function BudgetAnalysis() {
   const params = useParams();
   const { data: widget, isPending } = useDashboardWidget<BudgetAnalysisWidget>({
@@ -75,7 +79,7 @@ function BudgetAnalysisInternal({ widget }: BudgetAnalysisInternalProps) {
   const {
     conditions,
     conditionsOp,
-    onApply: onApplyFilter,
+    onApply,
     onDelete: onDeleteFilter,
     onUpdate: onUpdateFilter,
     onConditionsOpChange,
@@ -83,6 +87,54 @@ function BudgetAnalysisInternal({ widget }: BudgetAnalysisInternalProps) {
     widget?.meta?.conditions,
     widget?.meta?.conditionsOp,
   );
+
+  const onApplyFilter = (
+    conditionOrSaved:
+      | null
+      | {
+          conditions: RuleConditionEntity[];
+          conditionsOp: 'and' | 'or';
+          id: RuleConditionEntity[] | null;
+        }
+      | RuleConditionEntity,
+  ) => {
+    const isSavedFilterPayload =
+      conditionOrSaved !== null && 'conditions' in conditionOrSaved;
+
+    if (!isSavedFilterPayload) {
+      onApply(conditionOrSaved);
+      return;
+    }
+
+    const incomingConditions = conditionOrSaved.conditions;
+    const supportedConditions = incomingConditions.filter(condition =>
+      BUDGET_ANALYSIS_SUPPORTED_FIELDS.includes(condition.field),
+    );
+    const unsupportedConditions = incomingConditions.filter(
+      condition => !BUDGET_ANALYSIS_SUPPORTED_FIELDS.includes(condition.field),
+    );
+
+    const warningMessage =
+      'The "{{field}}" filter is not supported in Budget Analysis and was ignored.';
+
+    for (const condition of unsupportedConditions) {
+      dispatch(
+        addNotification({
+          notification: {
+            type: 'warning',
+            message: t(warningMessage, {
+              field: titleFirst(mapField(condition.field)),
+            }),
+          },
+        }),
+      );
+    }
+
+    onApply({
+      ...conditionOrSaved,
+      conditions: supportedConditions,
+    });
+  };
 
   const [allMonths, setAllMonths] = useState<Array<{
     name: string;
@@ -317,7 +369,7 @@ function BudgetAnalysisInternal({ widget }: BudgetAnalysisInternalProps) {
         onUpdateFilter={onUpdateFilter}
         onDeleteFilter={onDeleteFilter}
         onConditionsOpChange={onConditionsOpChange}
-        filterInclude={['category']}
+        filterInclude={BUDGET_ANALYSIS_SUPPORTED_FIELDS}
         inlineContent={
           <Tooltip
             content={

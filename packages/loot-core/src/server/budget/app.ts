@@ -1,6 +1,10 @@
 import * as monthUtils from '../../shared/months';
 import { q } from '../../shared/query';
-import type { CategoryEntity, CategoryGroupEntity } from '../../types/models';
+import type {
+  CategoryEntity,
+  CategoryGroupEntity,
+  RuleConditionEntity,
+} from '../../types/models';
 import { createApp } from '../app';
 import { aqlQuery } from '../aql';
 import * as db from '../db';
@@ -55,6 +59,7 @@ export type BudgetHandlers = {
   'category-group-move': typeof moveCategoryGroup;
   'category-group-delete': typeof deleteCategoryGroup;
   'must-category-transfer': typeof isCategoryTransferRequired;
+  'budget/conditions-to-category-ids': typeof conditionsToCategoryIds;
   'budget/get-category-automations': typeof goalActions.getTemplatesForCategory;
   'budget/set-category-automations': typeof goalActions.storeTemplates;
   'budget/store-note-templates': typeof goalNoteActions.storeNoteTemplates;
@@ -144,6 +149,10 @@ app.method('category-group-update', mutator(undoable(updateCategoryGroup)));
 app.method('category-group-move', mutator(undoable(moveCategoryGroup)));
 app.method('category-group-delete', mutator(undoable(deleteCategoryGroup)));
 app.method('must-category-transfer', isCategoryTransferRequired);
+app.method(
+  'budget/conditions-to-category-ids',
+  conditionsToCategoryIds,
+);
 
 app.method(
   'budget/get-category-automations',
@@ -158,6 +167,104 @@ app.method(
   mutator(goalNoteActions.storeNoteTemplates),
 );
 app.method('budget/render-note-templates', goalNoteActions.unparse);
+
+/**
+ * Resolve expense category IDs for a set of rule conditions.
+ * Applies only category and category_group conditions.
+ *
+ * Returns `null` when no executable conditions are provided.
+ */
+async function conditionsToCategoryIds({
+  conditions = [],
+  conditionsOp = 'and',
+}: {
+  conditions?: RuleConditionEntity[];
+  conditionsOp?: 'and' | 'or';
+}): Promise<{ categoryIds: string[] | null }> {
+  const categoryGroups = await getCategoryGroups();
+  const allCategories: CategoryEntity[] = categoryGroups.flatMap(
+    group => group.categories ?? [],
+  );
+  const groupNameById = new Map<string, string>(
+    categoryGroups.map(group => [group.id, group.name]),
+  );
+
+  const categoryConditions = conditions.filter(
+    condition =>
+      (condition.field === 'category' || condition.field === 'category_group') &&
+      !condition.customName,
+  );
+
+  if (categoryConditions.length === 0) {
+    return { categoryIds: null };
+  }
+
+  const baseCategories = allCategories.filter(
+    category => !category.is_income && !category.hidden,
+  );
+
+  const conditionResults = categoryConditions.map(condition => {
+    const getId = (category: CategoryEntity) =>
+      condition.field === 'category_group' ? category.group : category.id;
+    const getName = (category: CategoryEntity) =>
+      condition.field === 'category_group'
+        ? (groupNameById.get(category.group) ?? '')
+        : category.name;
+
+    return baseCategories.filter(category => {
+      const id = getId(category);
+      const name = getName(category);
+
+      switch (condition.op) {
+        case 'is':
+          return condition.value === id;
+        case 'isNot':
+          return condition.value !== id;
+        case 'oneOf':
+          return (condition.value as string[]).includes(id);
+        case 'notOneOf':
+          return !(condition.value as string[]).includes(id);
+        case 'contains':
+          return name.toLowerCase().includes(String(condition.value).toLowerCase());
+        case 'doesNotContain':
+          return !name.toLowerCase().includes(String(condition.value).toLowerCase());
+        case 'matches':
+          try {
+            return new RegExp(String(condition.value), 'i').test(name);
+          } catch {
+            return false;
+          }
+        default:
+          return true;
+      }
+    });
+  });
+
+  let matched: CategoryEntity[];
+  if (conditionsOp === 'or') {
+    const seen = new Set<string>();
+    matched = conditionResults.flat().filter(category => {
+      if (seen.has(category.id)) {
+        return false;
+      }
+      seen.add(category.id);
+      return true;
+    });
+  } else {
+    const ids = new Set(conditionResults[0].map(category => category.id));
+    for (let i = 1; i < conditionResults.length; i++) {
+      const currentIds = new Set(conditionResults[i].map(category => category.id));
+      for (const id of ids) {
+        if (!currentIds.has(id)) {
+          ids.delete(id);
+        }
+      }
+    }
+    matched = baseCategories.filter(category => ids.has(category.id));
+  }
+
+  return { categoryIds: matched.map(category => category.id) };
+}
 
 // Server must return AQL entities not the raw DB data
 async function getCategories() {

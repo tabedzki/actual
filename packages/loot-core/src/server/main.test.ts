@@ -276,6 +276,85 @@ describe('Budget', () => {
     });
     expect(changed.sort()).toMatchSnapshot();
   });
+
+  test('conditions-to-category-ids filters by category fields only', async () => {
+    await runMutator(async () => {
+      await db.insertCategoryGroup({ id: 'group1', name: 'Group One' });
+      await db.insertCategoryGroup({ id: 'group2', name: 'Group Two' });
+      await db.insertCategoryGroup({
+        id: 'income-group',
+        name: 'Income',
+        is_income: 1,
+      });
+
+      await db.insertCategory({
+        id: 'cat-a',
+        name: 'Alpha',
+        cat_group: 'group1',
+      });
+      await db.insertCategory({
+        id: 'cat-b',
+        name: 'Beta',
+        cat_group: 'group2',
+      });
+      await db.insertCategory({
+        id: 'cat-income',
+        name: 'Income Cat',
+        cat_group: 'income-group',
+        is_income: 1,
+      });
+    });
+
+    const byGroup = await runHandler(
+      handlers['budget/conditions-to-category-ids'],
+      {
+        conditions: [{ op: 'is', field: 'category_group', value: 'group1' }],
+        conditionsOp: 'and',
+      },
+    );
+
+    expect(byGroup.categoryIds).toEqual(['cat-a']);
+
+    const byCategory = await runHandler(
+      handlers['budget/conditions-to-category-ids'],
+      {
+        conditions: [{ op: 'oneOf', field: 'category', value: ['cat-a'] }],
+        conditionsOp: 'and',
+      },
+    );
+
+    expect(byCategory.categoryIds).toEqual(['cat-a']);
+
+    const byGroupNameContains = await runHandler(
+      handlers['budget/conditions-to-category-ids'],
+      {
+        conditions: [
+          { op: 'contains', field: 'category_group', value: 'group one' },
+        ],
+        conditionsOp: 'and',
+      },
+    );
+
+    expect(byGroupNameContains.categoryIds).toEqual(['cat-a']);
+  });
+
+  test('conditions-to-category-ids ignores non-category conditions', async () => {
+    const result = await runHandler(
+      handlers['budget/conditions-to-category-ids'],
+      {
+        conditions: [
+          {
+            op: 'is',
+            field: 'payee',
+            value: 'some-payee',
+          },
+        ],
+        conditionsOp: 'and',
+      },
+    );
+
+    expect(result.categoryIds).toBeNull();
+  });
 });
 
 describe('Categories', () => {
