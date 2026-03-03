@@ -67,15 +67,15 @@ export function createBudgetAnalysisSpreadsheet({
           cond.field === 'category_group' ? cat.group : cat.id;
         const matchesRegex =
           cond.op === 'matches' &&
-            typeof cond.value === 'string' &&
-            cond.value.length <= 256
+          typeof cond.value === 'string' &&
+          cond.value.length <= 256
             ? (() => {
-              try {
-                return new RegExp(cond.value, 'i');
-              } catch {
-                return null;
-              }
-            })()
+                try {
+                  return new RegExp(cond.value, 'i');
+                } catch {
+                  return null;
+                }
+              })()
             : null;
         return baseCategories.filter((cat: CategoryEntity) => {
           const key = getKey(cat);
