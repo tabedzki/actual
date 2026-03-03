@@ -96,6 +96,25 @@ export function createBudgetAnalysisSpreadsheet({
             }
           }
           return false;
+              typeof cond.value === 'string' &&
+              key.toLowerCase().includes(cond.value.toLowerCase())
+            );
+          } else if (cond.op === 'doesNotContain') {
+            return (
+              typeof cond.value === 'string' &&
+              !key.toLowerCase().includes(cond.value.toLowerCase())
+            );
+          } else if (cond.op === 'matches') {
+            if (typeof cond.value !== 'string') {
+              return false;
+            }
+            try {
+              return new RegExp(cond.value, 'i').test(key);
+            } catch {
+              return false;
+            }
+          }
+          return false;
         });
       });
 
