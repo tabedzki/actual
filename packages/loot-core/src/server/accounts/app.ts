@@ -1,6 +1,7 @@
 import { t } from 'i18next';
 import { v4 as uuidv4 } from 'uuid';
 
+import type { ImportTransactionsOpts } from '#types/api-handlers';
 import { captureException } from '../../platform/exceptions';
 import * as asyncStorage from '../../platform/server/asyncStorage';
 import * as connection from '../../platform/server/connection';
@@ -1069,7 +1070,7 @@ async function simpleFinBatchSync({
       const matchedTransactions: Array<TransactionEntity['id']> = [];
       const updatedAccounts: Array<AccountEntity['id']> = [];
 
-      if (syncResponse.res.error_code) {
+      if (syncResponse.res?.error_code) {
         errors.push(
           handleSyncError(
             {
@@ -1081,7 +1082,7 @@ async function simpleFinBatchSync({
             account,
           ),
         );
-      } else {
+      } else if (syncResponse.res) {
         const syncResponseData = await handleSyncResponse(
           syncResponse.res,
           account,
@@ -1090,6 +1091,15 @@ async function simpleFinBatchSync({
         newTransactions.push(...syncResponseData.newTransactions);
         matchedTransactions.push(...syncResponseData.matchedTransactions);
         updatedAccounts.push(...syncResponseData.updatedAccounts);
+      } else {
+        errors.push(
+          handleSyncError(
+            new Error(
+              'Failed syncing account "' + account.name + '": empty response',
+            ),
+            account,
+          ),
+        );
       }
 
       retVal.push({
@@ -1139,9 +1149,7 @@ async function importTransactions({
   accountId: AccountEntity['id'];
   transactions: ImportTransactionEntity[];
   isPreview: boolean;
-  opts?: {
-    defaultCleared?: boolean;
-  };
+  opts?: ImportTransactionsOpts;
 }): Promise<ImportTransactionsResult> {
   if (typeof accountId !== 'string') {
     throw APIError('transactions-import: accountId must be an id');
@@ -1155,6 +1163,8 @@ async function importTransactions({
       true,
       isPreview,
       opts?.defaultCleared,
+      false,
+      opts?.reimportDeleted,
     );
     return {
       errors: [],

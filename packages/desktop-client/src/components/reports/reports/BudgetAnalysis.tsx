@@ -317,7 +317,7 @@ function BudgetAnalysisInternal({ widget }: BudgetAnalysisInternalProps) {
         onUpdateFilter={onUpdateFilter}
         onDeleteFilter={onDeleteFilter}
         onConditionsOpChange={onConditionsOpChange}
-        filterInclude={['category']}
+        filterInclude={['category', 'saved']}
         inlineContent={
           <Tooltip
             content={

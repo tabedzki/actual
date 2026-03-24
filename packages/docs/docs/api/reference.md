@@ -120,6 +120,8 @@ Fields specific to a type of request are marked as such in the notes.
 
 All `update` and `delete` methods take an `id` to specify the desired object. `update` takes the fields to update as a second argument — it does not take a full object. That means even if a field is required, you don't have to pass it to `update`. For example, a `category` requires the `group_id` field, however `updateCategory(id, { name: "Food" })` is a valid call. Required means that an `update` can't set the field to `null` and a `create` must always contain the field.
 
+**Note:** `updateRule` is an exception — it requires the full [`Rule`](#rule) object including `id`, and returns `Promise<Rule>`.
+
 ## Primitives
 
 These are types.
@@ -199,7 +201,7 @@ This method is mainly for custom importers that want to skip all the automatic s
 
 #### `importTransactions`
 
-<Method name="importTransactions" args={[{ name: 'accountId', type: 'id'}, { name: 'transactions', type: 'Transaction[]'}]} returns="Promise<{ errors, added, updated }>" />
+<Method name="importTransactions" args={[{ name: 'accountId', type: 'id'}, { name: 'transactions', type: 'Transaction[]'}, { name: 'opts = {}', type: 'object?'}]} returns="Promise<{ errors, added, updated }>" />
 
 Adds multiple transactions at once, while going through the same process as importing a file or downloading transactions from a bank.
 In particular, all rules are run on the specified transactions before adding them.
@@ -208,6 +210,21 @@ Use `addTransactions` instead for adding raw transactions without post-processin
 The import will "reconcile" transactions to avoid adding duplicates. Transactions with the same `imported_id` will never be added more than once. Otherwise, the system will match transactions with the same amount and with similar dates and payees and try to avoid duplicates. If not using `imported_id` you should check the results after importing.
 
 It will also create transfers if a transfer payee is specified. See [transfers](#transfers).
+
+This method has the following optional flags (passed as the `opts` object):
+
+- `defaultCleared`: whether imported transactions should be marked as cleared (defaults to `true`)
+- `dryRun`: if `true`, returns what would be added/updated without actually modifying the database (defaults to `false`)
+- `reimportDeleted`: if `true`, transactions that were previously imported and then deleted will be reimported; if `false`, they will be skipped (defaults to `true` for backward compatibility — note that the [file import UI](/docs/transactions/importing#avoiding-duplicate-transactions) defaults to `false`)
+
+Example using opts:
+
+```js
+await api.importTransactions(accountId, transactions, {
+  reimportDeleted: false,
+  defaultCleared: false,
+});
+```
 
 This method returns an object with the following fields:
 
@@ -471,6 +488,12 @@ Each account has a corresponding "transfer payee" already created in the system.
 
 Get all payees.
 
+#### `getCommonPayees`
+
+<Method name="getCommonPayees" args={[]} returns="Promise<Payee[]>" />
+
+Get common payees that appear frequently in transactions.
+
 #### `createPayee`
 
 <Method name="createPayee" args={[{ name: 'payee', type: 'Payee' }]} returns="Promise<id>" />
@@ -572,9 +595,9 @@ Get all rules.
 
 #### `getPayeeRules`
 
-<Method name="getPayeeRules" args={[{ name: 'payeeId', type: "id" }]} returns="Promise<PayeeRule[]>" />
+<Method name="getPayeeRules" args={[{ name: 'payeeId', type: "id" }]} returns="Promise<Rule[]>" />
 
-Get all payee rules for `payeeId`.
+Get all rules associated with `payeeId`.
 
 #### `createRule`
 
@@ -584,9 +607,9 @@ Create a rule. Returns the new rule, including the `id`.
 
 #### `updateRule`
 
-<Method name="updateRule" args={[{ name: 'id', type: 'id' }, { name: 'fields', type: 'object' }]} returns="Promise<Rule>" />
+<Method name="updateRule" args={[{ name: 'rule', type: 'Rule' }]} returns="Promise<Rule>" />
 
-Update fields of a rule. `fields` can specify any field described in [`Rule`](#rule). Returns the updated rule.
+Update a rule. Unlike other update methods, this requires the full rule object including `id`. Returns the updated rule.
 
 #### `deleteRule`
 
@@ -637,7 +660,7 @@ Get all schedules. Returns an array of [`Schedule`](#schedule) objects.
 
 #### `createSchedule`
 
-<Method name="createSchedule" args={[{ properties: [{ name: 'schedule', type: 'Schedule' }] }]} returns="Promise<id>" />
+<Method name="createSchedule" args={[{ name: 'schedule', type: 'Schedule' }]} returns="Promise<id>" />
 
 Create schedule based on information filled in the schedule object. Please refer to notes of schedule object for details each field.
 
@@ -665,9 +688,9 @@ Update fields of a rule. `fields` can specify any field described in [`Schedule`
 
 #### `init`
 
-<Method name="init" args={[{ properties: [{ name: 'config', type: 'InitConfig' }] }]} returns="Promise<void>" />
+<Method name="init" args={[{ name: 'config', type: 'InitConfig?' }]} returns="Promise<void>" />
 
-Initializes the API by connecting to an Actual Budget server.
+Initializes the API by connecting to an Actual Budget server. The config parameter is optional and defaults to `{}` (local-only mode).
 
 #### `shutdown`
 
@@ -689,7 +712,7 @@ Run the 3rd party (GoCardless, SimpleFIN) bank sync operation. This will downloa
 
 #### `runImport`
 
-<Method name="runImport" args={[{ properties: [{ name: 'budgetName', type: 'string' }, { name: 'func', type: 'func' }] }]} returns="Promise<void>" />
+<Method name="runImport" args={[{ name: 'budgetName', type: 'string' }, { name: 'func', type: 'func' }]} returns="Promise<void>" />
 
 Creates a new budget file with the given name, and then runs the custom importer function to populate it with data.
 
@@ -713,7 +736,7 @@ Load a budget file. If the file exists locally, it will load from there. Otherwi
 
 #### `batchBudgetUpdates`
 
-<Method name="batchBudgetUpdates" args={[{ properties: [{ name: 'func', type: 'func' }] }]} returns="Promise<void>" />
+<Method name="batchBudgetUpdates" args={[{ name: 'func', type: 'func' }]} returns="Promise<void>" />
 
 Performs a batch of budget updates. This is useful for making multiple changes to the budget in a single call to the server.
 
