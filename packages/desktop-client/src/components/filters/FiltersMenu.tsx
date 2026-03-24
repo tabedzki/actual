@@ -495,11 +495,10 @@ export function FilterButton<T extends RuleConditionEntity>({
     .sort((a, b) => a[0].localeCompare(b[0]));
 
   const filterMenuItems: ComponentProps<typeof Menu>['items'] =
-    visibleFilterFields
-      .map(([name, text]) => ({
-        name,
-        text: titleFirst(text),
-      }));
+    visibleFilterFields.map(([name, text]) => ({
+      name,
+      text: titleFirst(text),
+    }));
 
   if (shouldShowFilterField('saved', include, exclude)) {
     filterMenuItems.push(Menu.line);
