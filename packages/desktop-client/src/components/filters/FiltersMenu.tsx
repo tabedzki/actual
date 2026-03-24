@@ -356,14 +356,26 @@ function ConfigureField<T extends RuleConditionEntity>({
   );
 }
 
+/**
+ * Props for the shared report filter picker.
+ * Note: the `include` and `exclude` props only control which fields are shown in the picker, they do not limit the fields that can be applied as filters. Additionally, if both `include` and `exclude` are provided, `include` acts as the allowlist before `exclude` is applied.
+ */
 type FilterButtonProps<T extends RuleConditionEntity> = {
   onApply: (cond: T) => void;
   compact: boolean;
   hover: boolean;
+  /** Fields hidden from the picker unless allowed by `include`. */
   exclude?: string[];
+  /** If both are provided, `include` acts as the allowlist before `exclude` is applied. */
   include?: string[];
 };
 
+/**
+ * Returns whether a filter field should be shown in the picker.
+ *
+ * If both `include` and `exclude` are provided, `include` acts as the
+ * allowlist before `exclude` is applied.
+ */
 function shouldShowFilterField(
   field: string,
   include?: string[],
@@ -376,6 +388,9 @@ function shouldShowFilterField(
   return exclude ? !exclude.includes(field) : true;
 }
 
+/**
+ * Shared filter picker used by reports to choose and apply filter conditions.
+ */
 export function FilterButton<T extends RuleConditionEntity>({
   onApply,
   compact,
