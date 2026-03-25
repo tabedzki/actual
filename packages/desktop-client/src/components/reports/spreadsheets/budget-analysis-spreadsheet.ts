@@ -46,7 +46,16 @@ export function createBudgetAnalysisSpreadsheet({
     setData: (data: BudgetAnalysisData) => void,
   ) => {
     // Get all categories
-    const { list: allCategories } = await send('get-categories');
+    const { list: allCategories, grouped: allCategoryGroups } =
+      await send('get-categories');
+
+    // Build a UUID → name map for category groups so text-based operators
+    // (contains, doesNotContain, matches) can match against the group name.
+    const groupNameById = new Map<string, string>(
+      allCategoryGroups.map(
+        (g: { id: string; name: string }) => [g.id, g.name] as const,
+      ),
+    );
 
     // Filter categories based on conditions (supports both 'category' and 'category_group' fields)
     const relevantConditions = conditions.filter(
@@ -81,6 +90,13 @@ export function createBudgetAnalysisSpreadsheet({
             : null;
         return baseCategories.filter((cat: CategoryEntity) => {
           const key = getKey(cat);
+          // For text-based operators, compare against the human-readable name
+          // rather than the UUID. For category_group, resolve UUID → name via
+          // the map; for category, use the category's own name directly.
+          const textValue =
+            cond.field === 'category_group'
+              ? (groupNameById.get(key) ?? key)
+              : cat.name;
           if (cond.op === 'is') {
             return cond.value === key;
           } else if (cond.op === 'isNot') {
@@ -92,15 +108,15 @@ export function createBudgetAnalysisSpreadsheet({
           } else if (cond.op === 'contains') {
             return (
               typeof cond.value === 'string' &&
-              key.toLowerCase().includes(cond.value.toLowerCase())
+              textValue.toLowerCase().includes(cond.value.toLowerCase())
             );
           } else if (cond.op === 'doesNotContain') {
             return (
               typeof cond.value === 'string' &&
-              !key.toLowerCase().includes(cond.value.toLowerCase())
+              !textValue.toLowerCase().includes(cond.value.toLowerCase())
             );
           } else if (cond.op === 'matches') {
-            return matchesRegex?.test(key) ?? false;
+            return matchesRegex?.test(textValue) ?? false;
           }
           return false;
         });
