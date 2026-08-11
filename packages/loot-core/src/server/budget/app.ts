@@ -207,6 +207,11 @@ async function getBudgetBounds() {
 }
 
 async function envelopeBudgetMonth({ month }: { month: string }) {
+  // A report may ask for a month beyond the +12-month horizon `createAllBudgets`
+  // bootstraps (e.g. Budget Analysis plotting further into the future); extend
+  // the materialized range on demand rather than silently returning zeros.
+  await budget.ensureMonthCreated(month);
+
   const groups = await db.getCategoriesGrouped();
   const sheetName = monthUtils.sheetForMonth(month);
 
@@ -261,6 +266,9 @@ async function envelopeBudgetMonth({ month }: { month: string }) {
 }
 
 async function trackingBudgetMonth({ month }: { month: string }) {
+  // See the matching comment in `envelopeBudgetMonth`.
+  await budget.ensureMonthCreated(month);
+
   const groups = await db.getCategoriesGrouped();
   const sheetName = monthUtils.sheetForMonth(month);
 

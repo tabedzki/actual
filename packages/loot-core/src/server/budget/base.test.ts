@@ -3,7 +3,7 @@ import * as sheet from '#server/sheet';
 // @ts-strict-ignore
 import * as monthUtils from '#shared/months';
 
-import { createAllBudgets } from './base';
+import { createAllBudgets, ensureMonthCreated } from './base';
 
 beforeEach(() => {
   return global.emptyDatabase()();
@@ -509,5 +509,66 @@ describe('Base budget', () => {
 
     const jan = monthUtils.sheetForMonth('2017-01');
     expect(sheet.getCellValue(jan, `sum-amount-${foodId}`)).toBe(-1000);
+  });
+
+  it('extends the budget horizon on demand past current month + 12', async () => {
+    await sheet.loadSpreadsheet(db);
+
+    await db.insertCategoryGroup({ id: 'group1', name: 'Expenses' });
+    await db.insertCategoryGroup({
+      id: 'group2',
+      name: 'Income',
+      is_income: 1,
+    });
+    const foodId = await db.insertCategory({
+      name: 'Food',
+      cat_group: 'group1',
+    });
+
+    const { end } = await createAllBudgets();
+    await sheet.waitOnSpreadsheet();
+
+    // A month well beyond the bootstrapped horizon has no sheet yet, so its
+    // budget cell reads as the uninitialized empty string.
+    const farMonth = monthUtils.addMonths(end, 6);
+    expect(
+      sheet
+        .get()
+        .getCellValueLoose(
+          monthUtils.sheetForMonth(farMonth),
+          `budget-${foodId}`,
+        ),
+    ).toBeFalsy();
+
+    await ensureMonthCreated(farMonth);
+    await sheet.waitOnSpreadsheet();
+
+    // Once ensured, the month is materialized with a real (zeroed) cell
+    // rather than being absent.
+    expect(
+      sheet.getCellValue(
+        monthUtils.sheetForMonth(farMonth),
+        `budget-${foodId}`,
+      ),
+    ).toBe(0);
+  });
+
+  it('is a no-op when the month is already created', async () => {
+    await sheet.loadSpreadsheet(db);
+    await db.insertCategoryGroup({ id: 'group1', name: 'Expenses' });
+    await db.insertCategoryGroup({
+      id: 'group2',
+      name: 'Income',
+      is_income: 1,
+    });
+
+    const { start } = await createAllBudgets();
+    await sheet.waitOnSpreadsheet();
+
+    const createdMonthsBefore = new Set(sheet.get().meta().createdMonths);
+    await ensureMonthCreated(start);
+    const createdMonthsAfter = sheet.get().meta().createdMonths;
+
+    expect(createdMonthsAfter).toEqual(createdMonthsBefore);
   });
 });

@@ -373,6 +373,30 @@ export async function createBudget(months) {
   await sheet.waitOnSpreadsheet();
 }
 
+// Extends the materialized budget horizon on demand when a caller (e.g. a
+// report) needs a month beyond what `createAllBudgets` bootstrapped (current
+// month + 12). `createBudget` requires its months in chronological order so
+// each one can chain off the previous month's rollover, so this fills the gap
+// from the current horizon up to `month` rather than creating `month` alone.
+export async function ensureMonthCreated(month: string) {
+  const meta = sheet.get().meta();
+  const createdMonths: Set<string> = meta.createdMonths || new Set();
+  if (createdMonths.has(month)) {
+    return;
+  }
+
+  const latestCreated = [...createdMonths].sort().pop();
+  const gapStart = latestCreated ? monthUtils.nextMonth(latestCreated) : month;
+  // `month` may be in the past relative to what's created if the earliest
+  // transaction moved; `getBudgetRange` already covers that case at bootstrap,
+  // so only the forward (future) gap needs filling here.
+  if (gapStart > month) {
+    return;
+  }
+
+  await createBudget(monthUtils.rangeInclusive(gapStart, month));
+}
+
 export async function createAllBudgets() {
   const earliestTransaction = await db.first<db.DbTransaction>(
     'SELECT * FROM transactions WHERE isChild=0 AND date IS NOT NULL ORDER BY date ASC LIMIT 1',
