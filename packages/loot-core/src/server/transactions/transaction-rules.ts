@@ -84,7 +84,7 @@ function invert(obj) {
 const internalFields = schemaConfig.views.transactions.fields;
 const publicFields = invert(schemaConfig.views.transactions.fields);
 
-function fromInternalField<T extends { field: string }>(obj: T): T {
+export function fromInternalField<T extends { field: string }>(obj: T): T {
   return {
     ...obj,
     field: publicFields[obj.field] || obj.field,

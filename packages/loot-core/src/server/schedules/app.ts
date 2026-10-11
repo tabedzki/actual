@@ -15,6 +15,7 @@ import * as prefs from '#server/prefs';
 import { Rule } from '#server/rules';
 import { addSyncListener, batchMessages } from '#server/sync';
 import {
+  fromInternalField,
   getRules,
   insertRule,
   ruleModel,
@@ -406,6 +407,11 @@ export async function updateSchedule({
   // This must be outside the `batchMessages` call because we change
   // and then read data
   if (conditions) {
+    // Callers may pass conditions read from `_conditions`, which use the
+    // internal field names (`acct`, `description`). Normalize them so they
+    // compare against the rule's (public) conditions below.
+    conditions = conditions.map(fromInternalField);
+
     const { date: dateCond } = extractScheduleConds(conditions);
     if (dateCond && dateCond.value == null) {
       throw new Error('Date is required');

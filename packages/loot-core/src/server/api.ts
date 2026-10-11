@@ -49,6 +49,7 @@ import { runMutator } from './mutators';
 import * as prefs from './prefs';
 import * as sheet from './sheet';
 import { batchMessages, setSyncingMode } from './sync';
+import { fromInternalField } from './transactions/transaction-rules';
 
 let IMPORT_MODE = false;
 
@@ -959,6 +960,8 @@ handlers['api/schedule-update'] = withMutation(async function ({
   }
 
   const sched = data[0] as ScheduleEntity;
+  // `_conditions` uses the internal field names (`acct`, `description`)
+  sched._conditions = sched._conditions.map(fromInternalField);
   let conditionsUpdated = false;
   // Find all indices to avoid direct assignment
   const payeeIndex = sched._conditions.findIndex(c => c.field === 'payee');

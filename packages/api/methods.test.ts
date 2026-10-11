@@ -1224,6 +1224,61 @@ test('Schedules: successfully complete schedules operations', async () => {
   );
 });
 
+// apis: updateSchedule
+describe('Schedules: updateSchedule on a schedule with an account', () => {
+  let scheduleId: string;
+  let accountId1: string;
+  let accountId2: string;
+
+  async function getSchedule() {
+    const schedules = await api.getSchedules();
+    return schedules.find(s => s.id === scheduleId);
+  }
+
+  beforeEach(async () => {
+    await api.loadBudget(budgetName);
+    accountId1 = await api.createAccount({ name: 'sched-acct-1' }, 0);
+    accountId2 = await api.createAccount({ name: 'sched-acct-2' }, 0);
+    const payeeId = await api.createPayee({ name: 'sched-payee' });
+    scheduleId = await api.createSchedule({
+      name: 'sched-with-account',
+      posts_transaction: false,
+      account: accountId1,
+      payee: payeeId,
+      amount: -5000,
+      amountOp: 'is',
+      date: {
+        frequency: 'monthly',
+        interval: 1,
+        start: '2025-06-13',
+        patterns: [],
+        skipWeekend: false,
+        weekendSolveMode: 'after',
+        endMode: 'never',
+      },
+    });
+  });
+
+  test('keeps a skipped next date when the amount changes', async () => {
+    const before = (await getSchedule())?.next_date;
+    await api.internal?.send('schedule/skip-next-date', { id: scheduleId });
+    const skipped = (await getSchedule())?.next_date;
+    expect(skipped).not.toEqual(before);
+
+    await api.updateSchedule(scheduleId, { amount: -6000 });
+
+    expect(await getSchedule()).toEqual(
+      expect.objectContaining({ amount: -6000, next_date: skipped }),
+    );
+  });
+
+  test('changes the account of a schedule that already has one', async () => {
+    await api.updateSchedule(scheduleId, { account: accountId2 });
+
+    expect((await getSchedule())?.account).toEqual(accountId2);
+  });
+});
+
 // apis: getPreferences
 test('Preferences: successfully read synced preferences', async () => {
   await api.loadBudget(budgetName);

@@ -8,6 +8,7 @@ import * as prefs from '#server/prefs';
 import { loadRules, updateRule } from '#server/transactions/transaction-rules';
 import { q } from '#shared/query';
 import { getNextDate } from '#shared/schedules';
+import type { RuleConditionEntity } from '#types/models';
 
 import {
   advanceSchedulesService,
@@ -396,6 +397,140 @@ describe('schedule app', () => {
       } = await aqlQuery(q('schedules').filter({ id }).select(['next_date']));
 
       expect(row.next_date).toBe('2020-12-30');
+    });
+
+    describe('updateSchedule with conditions read back from `_conditions`', () => {
+      // `_conditions` holds the rule's stored conditions, which use the
+      // internal field names (`acct`, `description`). The schedule edit form
+      // sends them back as-is, so `updateSchedule` must treat them the same
+      // as the public names (`account`, `payee`).
+      async function createSkippedSchedule({
+        withAccount = true,
+      }: { withAccount?: boolean } = {}) {
+        MockDate.set(new Date(2021, 4, 17, 12, 0, 0));
+        await db.insertAccount({ id: 'acct1', name: 'Checking' });
+        await db.insertAccount({ id: 'acct2', name: 'Savings' });
+        const payeeId = await db.insertPayee({ name: 'Internet company' });
+
+        const id = await createSchedule({
+          schedule: { name: 'Internet' },
+          conditions: [
+            { op: 'is', field: 'payee', value: payeeId },
+            ...(withAccount
+              ? [
+                  {
+                    op: 'is',
+                    field: 'account',
+                    value: 'acct1',
+                  } satisfies RuleConditionEntity,
+                ]
+              : []),
+            { op: 'isapprox', field: 'amount', value: -5000 },
+            {
+              op: 'isapprox',
+              field: 'date',
+              value: { start: '2021-05-17', frequency: 'monthly' },
+            },
+          ],
+        });
+
+        await skipNextDate({ id });
+
+        // A real edit happens later than the skip; moving the clock forward
+        // makes a `next_date` reset distinguishable from the skipped date.
+        MockDate.set(new Date(2021, 4, 17, 12, 0, 5));
+
+        const {
+          data: [row],
+        } = await aqlQuery(
+          q('schedules').filter({ id }).select(['next_date', '_conditions']),
+        );
+        expect(row.next_date).toBe('2021-06-17');
+
+        return { id, conditions: row._conditions };
+      }
+
+      async function getRow(id: string) {
+        const {
+          data: [row],
+        } = await aqlQuery(
+          q('schedules').filter({ id }).select(['next_date', '_conditions']),
+        );
+        return row;
+      }
+
+      it('keeps a skipped `next_date` when only the name changes', async () => {
+        const { id, conditions } = await createSkippedSchedule();
+        expect(conditions.map(c => c.field)).toContain('acct');
+
+        await updateSchedule({
+          schedule: { id, name: 'Broadband' },
+          conditions,
+        });
+
+        expect((await getRow(id)).next_date).toBe('2021-06-17');
+      });
+
+      it('keeps a skipped `next_date` when only the amount changes', async () => {
+        const { id, conditions } = await createSkippedSchedule();
+
+        await updateSchedule({
+          schedule: { id },
+          conditions: conditions.map(c =>
+            c.field === 'amount' ? { ...c, value: -6000 } : c,
+          ),
+        });
+
+        const row = await getRow(id);
+        expect(row.next_date).toBe('2021-06-17');
+        expect(row._conditions.find(c => c.field === 'amount').value).toBe(
+          -6000,
+        );
+      });
+
+      it('keeps a skipped `next_date` for a schedule without an account', async () => {
+        const { id, conditions } = await createSkippedSchedule({
+          withAccount: false,
+        });
+
+        await updateSchedule({
+          schedule: { id, name: 'Broadband' },
+          conditions,
+        });
+
+        expect((await getRow(id)).next_date).toBe('2021-06-17');
+      });
+
+      it('resets `next_date` when the account changes via the internal field name', async () => {
+        const { id, conditions } = await createSkippedSchedule();
+
+        await updateSchedule({
+          schedule: { id },
+          conditions: conditions.map(c =>
+            c.field === 'acct' ? { ...c, value: 'acct2' } : c,
+          ),
+        });
+
+        const row = await getRow(id);
+        expect(row.next_date).toBe('2021-05-17');
+        expect(row._conditions.find(c => c.field === 'acct').value).toBe(
+          'acct2',
+        );
+      });
+
+      it('does not duplicate the payee or account conditions', async () => {
+        const { id, conditions } = await createSkippedSchedule();
+
+        await updateSchedule({
+          schedule: { id, name: 'Broadband' },
+          conditions,
+        });
+
+        const fields = (await getRow(id))._conditions.map(c => c.field);
+        expect(fields.sort()).toEqual(
+          ['acct', 'amount', 'date', 'description'].sort(),
+        );
+      });
     });
 
     it('deleteSchedule deletes a schedule', async () => {
