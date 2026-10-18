@@ -2,25 +2,22 @@
 set -e
 
 #####################################################
-# Starts the sync server as an unprivileged user:
-# `actual` (uid/gid 1001), or PUID/PGID if they're set.
-# Older images ran as root, so data directories from
-# those images are handed over to that user first.
+# The image runs as `actual` (uid/gid 1001) by default.
+# Older images ran as root, so their data directories
+# are owned by root. Starting the container once with
+# `--user root` hands them over to `actual`, or to
+# PUID/PGID if they're set, and then drops root.
 #####################################################
 
 data_dirs="${ACTUAL_DATA_DIR:-/data} ${ACTUAL_SERVER_FILES:-} ${ACTUAL_USER_FILES:-}"
 
-# Started as a non-root user (e.g. `docker run --user`), so nothing can be
-# handed over. Fail early if the data is still root-owned: otherwise the server
-# starts and passes its health check, but every sign-in fails with
-# SQLITE_READONLY. Write a real file rather than using `test -w`: busybox's
-# `test -w` only checks permission bits, so it misses read-only and
-# root-squashed mounts.
 if [ "$(id -u)" != "0" ]; then
+  # Write a real file rather than using `test -w`: busybox's `test -w` only
+  # checks permission bits, so it misses read-only and root-squashed mounts.
   for dir in $data_dirs; do
     if [ -d "$dir" ] && ! (touch "$dir/.actual-write-test" && rm -f "$dir/.actual-write-test") 2>/dev/null; then
       echo "Error: uid $(id -u) can't write to $dir." >&2
-      echo "Data from older images is owned by root. Start the container without --user once" >&2
+      echo "Data from older images is owned by root. Start the container once with --user root" >&2
       echo "to hand it over automatically, or run: chown -R $(id -u):$(id -g) <your data folder>" >&2
       exit 1
     fi

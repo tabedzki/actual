@@ -58,8 +58,11 @@ COPY --from=builder /app/packages/sync-server/build ./
 # script dir changed when we swapped build method, add the legacy dir in for compatibility
 RUN mkdir -p src && ln -s ../scripts src/scripts
 
-# Hands old root-owned data over to the `actual` user, then drops root
+# Started with `--user root`, hands old root-owned data over to `actual` and drops root
 COPY --chmod=0755 packages/sync-server/docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+# Numeric so Kubernetes can verify runAsNonRoot without a runAsUser
+USER ${USER_UID}:${USER_GID}
 
 ENTRYPOINT ["/sbin/tini", "-g", "--", "/usr/local/bin/docker-entrypoint.sh"]
 EXPOSE 5006

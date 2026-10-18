@@ -41,6 +41,12 @@ You can optionally configure the container using environment variables — see t
 
 ### Update Docker Compose container
 
+:::warning
+
+Recent images run the server as a non-root user. If your data folder was created by an older image, see [Updating From an Older Image](#updating-from-an-older-image) before you update.
+
+:::
+
 ```bash
 $ docker compose pull && docker compose up -d
 ```
@@ -71,6 +77,12 @@ $ docker run --pull=always --restart=unless-stopped -d -p 5006:5006 -v YOUR/PATH
 
 ### Update Docker container using docker command
 
+:::warning
+
+Recent images run the server as a non-root user. If your data folder was created by an older image, see [Updating From an Older Image](#updating-from-an-older-image) before you update.
+
+:::
+
 ```bash
 $ docker stop my_actual_budget
 ```
@@ -91,27 +103,44 @@ $ docker stop my_actual_budget && docker container rm my_actual_budget && docker
 
 ## File Ownership
 
-The server runs inside the container as the `actual` user (uid and gid `1001`), not as root. When the container starts, it changes the owner of any files in your data folder that belong to another user. Data written by older images, which ran as root, keeps working after an update, and you can still go back to an older image if you need to.
+The server runs inside the container as the `actual` user (uid and gid `1001`), not as root. On Linux, this means the data folder on your host needs to be writable by uid `1001`. A named Docker volume is set up this way automatically. A host folder that Docker creates for a bind mount is owned by root, so give it to uid `1001` first:
 
-On Linux, this means the data folder on your host will show as owned by uid `1001`. To have it owned by your own user instead, set the `PUID` and `PGID` environment variables to that user's ids (run `id -u` and `id -g` to find them):
+```bash
+sudo chown -R 1001:1001 ./actual-data
+```
+
+### Updating From an Older Image
+
+Older images ran the server as root, so your data folder may still be owned by root. If so, the server stops at startup with an error explaining why. Either run the `chown` command above, or start the container once as root and let it hand the folder over automatically:
 
 ```yaml
 services:
   actual_server:
+    user: root
+```
+
+When started as root, the container changes the owner of any files in the data folder that belong to another user, then runs the server as `actual`. You can remove `user: root` afterwards. To have the files owned by your own user instead, also set the `PUID` and `PGID` environment variables to that user's ids (run `id -u` and `id -g` to find them):
+
+```yaml
+services:
+  actual_server:
+    user: root
     environment:
       - PUID=1000
       - PGID=1000
 ```
 
-Alternatively, start the container as that user with `--user 1000:1000` (or `user: '1000:1000'` in Docker Compose). In that case the container doesn't change any owners, so the user needs write access to the data folder already. If it doesn't, the container stops at startup with an error explaining how to fix it. For data from an older image, start it once without `--user` (with `PUID` and `PGID` set) to hand the folder over, then switch to `--user`.
+After that, run the container as that user with `--user 1000:1000` (or `user: '1000:1000'` in Docker Compose).
 
-On Kubernetes, set `runAsUser: 1001`, `runAsGroup: 1001` and `fsGroup: 1001` in the pod's `securityContext`.
-
-The server keeps running as root, and logs a warning explaining why, if:
+When started as root, the server keeps running as root, and logs a warning explaining why, if:
 
 - the user can't write to the data folder, for example on a network share that doesn't allow changing file owners,
 - the user can't read a file the server needs from outside the data folder, such as a TLS certificate or a secret passed with a `_FILE` variable, or
 - the container was started without the capabilities needed to switch users, for example with `--cap-drop ALL`.
+
+### Kubernetes
+
+The image declares a numeric user, so `runAsNonRoot: true` works without setting `runAsUser`. Set `fsGroup: 1001` in the pod's `securityContext` so the volume is writable.
 
 ## Test connection within local network
 
