@@ -7,6 +7,11 @@ name: Build Branch Docker Image
 # - actual-server:<tag-prefix>
 # - actual-server:<tag-prefix>-<short commit sha>
 on:
+  # workflow_dispatch only works for workflows on the default branch, so pushing
+  # to this branch also builds the defaults below.
+  push:
+    branches:
+      - tabedzki/ci/docker-non-root-image
   workflow_dispatch:
     inputs:
       ref:
@@ -31,12 +36,16 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || 'tabedzki/feat/docker-non-root' }}
           persist-credentials: false
 
-      - name: Get short commit sha
+      - name: Get tag prefix and short commit sha
         id: sha
-        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+        env:
+          TAG_PREFIX: ${{ inputs.tag-prefix || 'docker-non-root' }}
+        run: |
+          echo "prefix=$TAG_PREFIX" >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
@@ -51,8 +60,8 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/actual-server
           flavor: ${{ matrix.os != 'ubuntu' && format('suffix=-{0}', matrix.os) || '' }}
           tags: |
-            type=raw,value=${{ inputs.tag-prefix }}
-            type=raw,value=${{ inputs.tag-prefix }}-${{ steps.sha.outputs.short }}
+            type=raw,value=${{ steps.sha.outputs.prefix }}
+            type=raw,value=${{ steps.sha.outputs.prefix }}-${{ steps.sha.outputs.short }}
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
