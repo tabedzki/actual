@@ -1,0 +1,102 @@
+name: Build Branch Docker Image
+
+# Manually publishes a Docker image of an arbitrary branch to GitHub Container
+# Registry, e.g. for trying out a feature branch from a fork.
+#
+# Creates the following tags (with a `-alpine` suffix for the alpine variant):
+# - actual-server:<tag-prefix>
+# - actual-server:<tag-prefix>-<short commit sha>
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build
+        default: tabedzki/feat/docker-non-root
+      tag-prefix:
+        description: Prefix for the image tags
+        default: docker-non-root
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu, alpine]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Get short commit sha
+        id: sha
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/actual-server
+          flavor: ${{ matrix.os != 'ubuntu' && format('suffix=-{0}', matrix.os) || '' }}
+          tags: |
+            type=raw,value=${{ inputs.tag-prefix }}
+            type=raw,value=${{ inputs.tag-prefix }}-${{ steps.sha.outputs.short }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Building outside of the docker image allows us to build once and push to multiple platforms
+      # This is faster and avoids yarn memory issues
+      - name: Set up environment
+        uses: ./.github/actions/setup
+        with:
+          cache: 'false'
+      - name: Build Web
+        run: yarn build:server
+
+      - name: Build image for testing
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          push: false
+          load: true
+          file: packages/sync-server/docker/${{ matrix.os }}.Dockerfile
+          tags: actualbudget/actual-server-testing
+
+      - name: Test that the docker image boots
+        timeout-minutes: 1
+        run: |
+          docker run --detach --network=host --name actual-server actualbudget/actual-server-testing
+          HEALTHCMD=$(yq -r '.services.actual_server.healthcheck.test[1]' packages/sync-server/docker-compose.yml)
+          until docker exec actual-server sh -c "$HEALTHCMD"; do sleep 1; done
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker logs actual-server || true
+
+      # This will use the cache from the earlier build step and not rebuild the image
+      - name: Build and push images
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          push: true
+          file: packages/sync-server/docker/${{ matrix.os }}.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
