@@ -70,6 +70,14 @@ jobs:
               github,
               owner: context.repo.owner,
               repo: context.repo.repo,
+              // Keep in sync with the artifact downloads below. A build that
+              // failed in an unrelated job is still usable if it has these.
+              requiredArtifacts: [
+                'build-stats',
+                'api-build-stats',
+                'cli-build-stats',
+                'crdt-build-stats',
+              ],
               log: message => core.info(message),
             };
             // `build.yml` head artifacts use `refs/pull/N/merge`, which is
